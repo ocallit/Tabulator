@@ -1,0 +1,24 @@
+{
+  "name": "ocallit/tabulator",
+  "description": "Util functions for tabulator",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "ocallit/sqler": "*",
+    "slowprog/composer-copy-file": "~0.3",
+    "ext-mysqli": "*"
+  },
+  "preferred-install": {
+    "ocallit/sqler": "source"
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  },
+  "autoload": {
+    "psr-4": {
+      "Ocallit\\tabulator\\": "src/"
+    }
+  }
+}
