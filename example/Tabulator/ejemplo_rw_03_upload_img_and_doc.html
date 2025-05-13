@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tabulator Table with Image and Attachment Upload</title>
+
+  <link href="../../public_html/assets/tabulator/css/tabulator_oc.css" rel="stylesheet">
+  <style>
+    .editing {
+      background-color: #fff8dc; /* light yellow */
+      border-left: 1px solid #ffa500; /* orange left bar */
+      border-bottom: 1px solid #ffa500; /* orange left bar */
+    }
+    .editing .tabulator-cell {
+      background-color: #fff8dc; /* light yellow */
+      border-bottom: 1px solid #ffa500; /* orange left bar */
+    }
+
+    .tabulator-cell button {
+      margin: 0 2px;
+      cursor: pointer;
+    }
+    img.thumb {
+      height: 64px;
+      max-width: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+<div id="table"></div>
+
+<script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+<script src="../../public_html/assets/tabulator/js/ocTabulator.js"></script>
+<script>
+  const gridData = [
+    {
+      id: 1,
+      name: "Alice",
+      age: 25,
+      email: "alice@example.com",
+      img_url: "https://via.placeholder.com/64",
+      attachment_url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+    },
+    {
+      id: 2,
+      name: "Bob",
+      age: 30,
+      email: "bob@example.com",
+      img_url: "https://via.placeholder.com/64",
+      attachment_url: ""
+    },
+  ];
+
+  // Create a new ocTabulator instance
+  const userTable = new ocTabulator("#table", {
+    deleteIdentifierField: "name"
+  });
+
+  // Create the Tabulator instance directly
+  const myTabulator = new Tabulator("#table", {
+    data: gridData,
+    layout: "fitColumns",
+    reactiveData: true,
+    columnDefaults: {
+      resizable: true
+    },
+    cellEdited: function(cell) {
+      // Check if the edited cell is the image URL
+      if (cell.getField() === "img_url") {
+        console.log("Image URL updated:", cell.getValue());
+      }
+    },
+    columns: [
+      {
+        formatter: "rownum",
+        hozAlign: "center",
+        width: 60,
+        resizable: false
+      },
+      {
+        title: "Actions",
+        field: "actions",
+        formatter: function(cell) {
+          return userTable.actionFormatter(cell);
+        },
+        width: 120,
+        hozAlign: "center",
+        cellClick: function(e, cell) {
+          userTable.onActionClick(e, cell);
+        },
+        resizable: false
+      },
+      {
+        title: "Name",
+        field: "name",
+        editor: "input",
+        validator: "required",
+        width: 200,
+        editable: function(cell) {
+          return userTable.editingRows.has(cell.getRow());
+        }
+      },
+      {
+        title: "Age",
+        field: "age",
+        editor: "number",
+        validator: ["required", "min:18"],
+        width: 100,
+        hozAlign: "right",
+        editable: function(cell) {
+          return userTable.editingRows.has(cell.getRow());
+        }
+      },
+      {
+        title: "Email",
+        field: "email",
+        editor: "input",
+        width: 250,
+        editable: function(cell) {
+          return userTable.editingRows.has(cell.getRow());
+        }
+      },
+      {
+        title: "Avatar",
+        field: "img_url",
+        width: 100,
+        resizable: false,
+        formatter: (cell) => {
+          const url = cell.getValue();
+          return url ? `<img src="${url}" class="thumb">` : '';
+        },
+        editor: (cell, onRendered, success, cancel) => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/*";
+          input.style.width = "100%";
+
+          input.addEventListener("change", () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            // Get the row data
+            const row = cell.getRow();
+            const rowData = row.getData();
+
+            userTable.uploadImageToServer(file, rowData).then(data => {
+              if (data && data.url) {
+                console.log("Server returned image URL:", data.url);
+                success(data.url); // updates cell value with the URL from server
+                console.log("Cell value updated with new image URL");
+              } else {
+                alert("Image upload failed");
+                cancel();
+              }
+            }).catch((error) => {
+              console.error("Upload error:", error);
+              alert("Upload error");
+              cancel();
+            });
+          });
+
+          return input;
+        },
+        editable: function(cell) {
+          return userTable.editingRows.has(cell.getRow());
+        }
+      },
+      {
+        title: "Attachment",
+        field: "attachment_url",
+        width: 150,
+        resizable: false,
+        formatter: (cell) => {
+          const url = cell.getValue();
+          return url
+              ? `<a href="${url}" target="_blank" title="Open Attachment">📎</a>`
+              : '';
+        },
+        editor: (cell, onRendered, success, cancel) => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls";
+          input.style.width = "100%";
+
+          const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+          input.addEventListener("change", () => {
+            const file = input.files[0];
+            if (!file) return;
+
+            if (file.size > MAX_FILE_SIZE) {
+              alert("File is too large. Max 5 MB allowed.");
+              cancel();
+              return;
+            }
+
+            // Get the row data
+            const row = cell.getRow();
+            const rowData = row.getData();
+
+            userTable.uploadAttachmentToServer(file, rowData).then(url => {
+              if (url) {
+                success(url); // updates cell with the new URL
+              } else {
+                alert("Attachment upload failed");
+                cancel();
+              }
+            }).catch(() => {
+              alert("Upload error");
+              cancel();
+            });
+          });
+
+          return input;
+        },
+        editable: function(cell) {
+          return userTable.editingRows.has(cell.getRow());
+        }
+      }
+    ]
+  });
+
+  // Connect the ocTabulator and Tabulator instances
+  userTable.setTable(myTabulator);
+</script>
+</body>
+</html>
