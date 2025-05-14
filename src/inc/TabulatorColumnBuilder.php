@@ -5,6 +5,7 @@ namespace Ocallit\Tabulator;
 
 use  \Ocallit\Sqler;
 use Ocallit\Sqler\DatabaseMetadata;
+use Ocallit\Sqler\SQLExecutor;
 
 /**
  * Given a SQL query, this class builds a Tabulator column configuration
@@ -12,13 +13,13 @@ use Ocallit\Sqler\DatabaseMetadata;
  * The main idea is to paste and fine tune the column definition into a page, but it could be used directly
  */
 class TabulatorColumnBuilder {
-    protected \Ocallit\Sqler\SQLExecutor $sqlExecutor;
-    protected \Ocallit\Sqler\DatabaseMetadata $dbMetadata;
+    protected SQLExecutor $sqlExecutor;
+    protected DatabaseMetadata $dbMetadata;
     protected array $query;
     protected array $fields = [];
     protected array $tableLookups = [];
 
-    public function __construct(\Ocallit\Sqler\SQLExecutor $sqlExecutor, string $query) {
+    public function __construct(SQLExecutor $sqlExecutor, string $query) {
         $this->sqlExecutor = $sqlExecutor;
         $this->dbMetadata = DatabaseMetadata::getInstance($sqlExecutor);
         $this->query = ['sql' => $query];
@@ -369,18 +370,16 @@ class TabulatorColumnBuilder {
           'resizable' => FALSE,
         ];
 
-        // Add action column for row-based editing
+        // Add action column for row-based editing and deletion
         $columns[] = [
           'title' => 'Actions',
           'field' => 'actions',
-          'formatter' => 'html',
+          'formatter' => 'function(cell) { return userTable.actionFormatter(cell); }',
           'width' => 120,
           'hozAlign' => 'center',
           'resizable' => FALSE,
           'headerSort' => FALSE,
-          'formatterParams' => [
-            'action' => 'edit',
-          ],
+          'cellClick' => 'function(e, cell) { userTable.onActionClick(e, cell); }',
         ];
 
         // Process field columns
@@ -443,6 +442,9 @@ class TabulatorColumnBuilder {
 
             // Add editor
             if(!($fieldInfo['isPrimaryKey'] && $fieldInfo['isAutoIncrement'])) {
+                // Add editable function to check if row is being edited
+                $column['editable'] = 'function(cell) { return userTable.editingRows.has(cell.getRow()); }';
+
                 if($fieldInfo['isEnum'] && !empty($fieldInfo['enumValues'])) {
                     $column['editor'] = 'select';
                     $column['editorParams'] = [
@@ -473,11 +475,94 @@ class TabulatorColumnBuilder {
                     ];
                 } elseif($fieldInfo['type'] === MYSQLI_TYPE_BLOB || $fieldInfo['type'] === MYSQLI_TYPE_LONG_BLOB) {
                     if($this->isBinaryContent($fieldInfo)) {
-                        $column['editor'] = 'input';
-                        $column['editorParams'] = [
-                          'type' => 'file',
-                          'accept' => 'image/*',
-                        ];
+                        // Use custom editor for image upload
+                        $column['editor'] = <<<JS
+(cell, onRendered, success, cancel) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.style.width = "100%";
+
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Get the row data
+    const row = cell.getRow();
+    const rowData = row.getData();
+
+    userTable.uploadImageToServer(file, rowData).then(data => {
+      if (data && data.url) {
+        success(data.url); // updates cell value with the URL from server
+      } else {
+        alert("Image upload failed");
+        cancel();
+      }
+    }).catch((error) => {
+      console.error("Upload error:", error);
+      alert("Upload error");
+      cancel();
+    });
+  });
+
+  return input;
+}
+JS;
+                        // Update formatter to display images
+                        $column['formatter'] = <<<JS
+(cell) => {
+  const url = cell.getValue();
+  return url ? `<img src="\${url}" class="thumb">` : '';
+}
+JS;
+                    } elseif(preg_match('/attachment|document|file|pdf|doc/i', $fieldInfo['name'])) {
+                        // Use custom editor for document upload
+                        $column['editor'] = <<<JS
+(cell, onRendered, success, cancel) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls";
+  input.style.width = "100%";
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      alert("File is too large. Max 5 MB allowed.");
+      cancel();
+      return;
+    }
+
+    // Get the row data
+    const row = cell.getRow();
+    const rowData = row.getData();
+
+    userTable.uploadAttachmentToServer(file, rowData).then(url => {
+      if (url) {
+        success(url); // updates cell with the new URL
+      } else {
+        alert("Attachment upload failed");
+        cancel();
+      }
+    }).catch(() => {
+      alert("Upload error");
+      cancel();
+    });
+  });
+
+  return input;
+}
+JS;
+                        // Update formatter to display document links
+                        $column['formatter'] = <<<JS
+(cell) => {
+  const url = cell.getValue();
+  return url ? `<a href="\${url}" target="_blank" title="Open Attachment">📎</a>` : '';
+}
+JS;
                     } else {
                         $column['editor'] = 'textarea';
                     }
@@ -508,6 +593,10 @@ class TabulatorColumnBuilder {
         return $columns;
     }
 
+    // These methods are no longer needed as we're using the ocTabulator class's methods instead
+    // They are kept here as comments for reference
+
+    /*
     public function getActionFormatter(): string {
         return <<<JS
 function actionFormatter(cell) {
@@ -594,6 +683,7 @@ function saveRowToServer(data) {
 }
 JS;
     }
+    */
 
     public function getTableStyles(): string {
         return <<<CSS
@@ -615,13 +705,22 @@ CSS;
     public function getTabulatorInitialization(): string {
         $columns = json_encode($this->getTabulatorColumns(), JSON_PRETTY_PRINT);
 
+        // Get the primary key field if available
+        $primaryKeyField = "id"; // Default
+        foreach ($this->fields as $fieldName => $fieldInfo) {
+            if ($fieldInfo['isPrimaryKey']) {
+                $primaryKeyField = $fieldName;
+                break;
+            }
+        }
+
         return <<<JS
-const editingRows = new Map();
+// Create a new ocTabulator instance
+const userTable = new ocTabulator({
+    deleteIdentifierField: "$primaryKeyField" // Using the primary key field from the database
+});
 
-\${$this->getActionFormatter()}
-
-\${$this->getActionClickHandler()}
-
+// Create the Tabulator instance
 const table = new Tabulator("#table", {
     layout: "fitColumns",
     responsiveLayout: "collapse",
@@ -630,8 +729,37 @@ const table = new Tabulator("#table", {
         resizable: true
     },
     columns: ${$columns},
-    placeholder: "No Data Available"
+    placeholder: "No Data Available",
+    ajaxURL: window.location.pathname, // Assuming the current page handles AJAX requests
+    ajaxConfig: {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    }
 });
+
+// Connect the ocTabulator and Tabulator instances (if setTable method exists)
+if (typeof userTable.setTable === 'function') {
+    userTable.setTable(table);
+}
+
+// Add a method to handle form data uploads for compatibility with the server
+userTable.fakeServerSave = function(data) {
+    return fetch(window.location.pathname, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({
+            action: "save",
+            data: data
+        })
+    })
+    .then(response => response.json());
+};
 JS;
     }
 
@@ -652,6 +780,7 @@ JS;
     <div id="table"></div>
 
     <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+    <script src="/assets/tabulator/js/ocTabulator.js"></script>
     <script>
         \${$this->getTabulatorInitialization()}
     </script>
