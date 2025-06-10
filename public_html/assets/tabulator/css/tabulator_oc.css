@@ -382,3 +382,29 @@
     background-color: #fdd; // Light red background
 }
 */
+
+/* Enhanced Edit Mode Styling */
+.tabulator-row.editing {
+  background-color: var(--octabulator-edit-bg) !important; /* Light yellow */
+  border-left: 2px solid #ffa500; /* orange left bar */
+  border-bottom: 1px solid #ffa500; /* orange bottom bar */
+}
+
+.tabulator-row.editing .tabulator-cell {
+  background-color: var(--octabulator-edit-bg) !important; /* Light yellow */
+  border-bottom: 1px solid #ffa500; /* orange bottom bar */
+}
+
+/* Style the edit button in the action column */
+.tabulator-row .edit-btn {
+  padding: 2px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  background-color: var(--octabulator-edit-bg);
+}
+
+/* Highlight the edit button when row is in edit mode */
+.tabulator-row.editing .edit-btn {
+  background-color: var(--octabulator-edit-bg);
+  border: 1px solid #ffa500;
+}
