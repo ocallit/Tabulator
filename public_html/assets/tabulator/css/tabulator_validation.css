@@ -1,0 +1,13 @@
+:root {
+  --tabulator-color-error:#f44336;   /* authors can override per-theme */
+  --tabulator-bg-error:#ffebee;
+}
+.tabulator_invalid {
+  background-color:var(--tabulator-bg-error) !important;
+  border:2px solid var(--tabulator-color-error) !important;
+}
+.tabulator_invalid input,
+.tabulator_invalid select,
+.tabulator_invalid textarea{
+  border-color:var(--tabulator-color-error) !important;
+}

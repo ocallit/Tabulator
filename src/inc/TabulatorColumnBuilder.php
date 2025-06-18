@@ -465,6 +465,15 @@ class TabulatorColumnBuilder {
                         $params['step'] = 0.1 ** $fieldInfo['decimals'];
                     }
 
+                    // Add elementAttributes for integer columns (decimals === 0)
+                    if ($fieldInfo['decimals'] === 0) {
+                        $params['elementAttributes'] = [
+                            'inputmode' => 'numeric',
+                            'pattern'   => '[0-9]*',
+                            'step'      => '1',
+                        ];
+                    }
+
                     if(!empty($params)) {
                         $column['editorParams'] = $params;
                     }

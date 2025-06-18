@@ -2,38 +2,19 @@
  * ocTabulator - A class for creating and managing Tabulator tables
  * This class encapsulates all variables and functions needed for Tabulator tables
  * to avoid global variable conflicts when using multiple tables on the same page.
+ *
+ * NOTE FOR INTEGRATORS:
+ *   You MUST include the CSS file `tabulator_validation.css` on every page using Tabulator validation.
+ *   Example:
+ *     <link rel="stylesheet" href="/assets/tabulator/css/tabulator_validation.css">
+ *   This is required for error styling to work (no more runtime CSS injection).
  */
 class ocTabulator {
-  /**
-   * Ensures that Tabulator validation CSS is injected once per page load.
-   */
-  static ensureValidationStyles() {
-    if (!document.getElementById("tabulator_validation_styles")) {
-      const style = document.createElement("style");
-      style.id = "tabulator_validation_styles";
-      style.innerHTML = `
-.tabulator_invalid {
-  background-color:#ffebee !important;
-  border:2px solid #f44336 !important;
-}
-.tabulator_invalid input,
-.tabulator_invalid select,
-.tabulator_invalid textarea{
-  border-color:#f44336 !important;
-}
-      `;
-      document.head.appendChild(style);
-    }
-  }
-
   /**
    * Constructor for the ocTabulator class
    * @param {object} options - Configuration options for the Tabulator
    */
   constructor( options = {}) {
-    // Ensure validation styles are available
-    ocTabulator.ensureValidationStyles();
-
     // Instance properties instead of global variables
     this.editingRows = new Map();
     this.rowToDelete = null;
@@ -286,65 +267,10 @@ class ocTabulator {
 
   /**
    * Initialize validation event listeners for Tabulator grid.
+   * Only Tabulator's validator engine is used (no HTML5 validity/input listeners).
    */
   tabulator_initValidationListeners() {
     if (!this.table) return;
-
-    // Helper: Remove tabulator_invalid from all cells in a row
-    const tabulator_clearInvalidFromRow = (row) => {
-      row.getCells().forEach(cell => {
-        cell.getElement().classList.remove("tabulator_invalid");
-      });
-    };
-
-    // Listen for when a cell enters edit mode
-    this.table.on("cellEditing", (cell) => {
-      const cellEl = cell.getElement();
-      // Try to find input/select/textarea inside the cell
-      const editorEl = cellEl.querySelector("input,select,textarea");
-      if (!editorEl) return;
-
-      // Add integer-specific attributes if needed
-      const col = cell.getColumn && cell.getColumn();
-      const validators = col && col.modules && col.modules.validate && col.modules.validate.validators;
-      const validatorArr = Array.isArray(col?.definition?.validator)
-        ? col.definition.validator
-        : (typeof col?.definition?.validator === "string" ? [col.definition.validator] : []);
-      if (validatorArr.includes("integer") && editorEl.tagName === "INPUT") {
-        editorEl.setAttribute("step", "1");
-        editorEl.setAttribute("pattern", "[0-9]*");
-        editorEl.setAttribute("inputmode", "numeric");
-      }
-
-      // Handler to check validity and toggle class
-      const tabulator_checkAndSetInvalid = () => {
-        let htmlValid = editorEl.checkValidity ? editorEl.checkValidity() : true;
-        let tabValid = true;
-        if (typeof cell.validate === "function") {
-          const result = cell.validate(editorEl.value);
-          tabValid = result === true || (result && result.valid);
-        }
-        if (!htmlValid || !tabValid) {
-          cellEl.classList.add("tabulator_invalid");
-        } else {
-          cellEl.classList.remove("tabulator_invalid");
-        }
-      };
-
-      // Save handler refs for later removal if needed
-      if (!editorEl._tabulatorHandlers) editorEl._tabulatorHandlers = {};
-      // Remove old listeners (if any)
-      if (editorEl._tabulatorHandlers.input) editorEl.removeEventListener("input", editorEl._tabulatorHandlers.input);
-      if (editorEl._tabulatorHandlers.change) editorEl.removeEventListener("change", editorEl._tabulatorHandlers.change);
-
-      editorEl._tabulatorHandlers.input = tabulator_checkAndSetInvalid;
-      editorEl._tabulatorHandlers.change = tabulator_checkAndSetInvalid;
-      editorEl.addEventListener("input", tabulator_checkAndSetInvalid);
-      editorEl.addEventListener("change", tabulator_checkAndSetInvalid);
-
-      // Initial check
-      setTimeout(tabulator_checkAndSetInvalid, 10);
-    });
 
     // Listen for Tabulator's own validation failures
     this.table.on("validationFailed", (cell, value, validators) => {
@@ -352,9 +278,8 @@ class ocTabulator {
       cellEl.classList.add("tabulator_invalid");
     });
 
-    // Listen for cellEdited and cellEditCancelled
+    // On cellEdited/cellEditCancelled: revalidate and clear error state if valid
     const clearIfValid = (cell) => {
-      // Re-validate and remove if now valid
       let valid = true;
       if (typeof cell.validate === "function") {
         const result = cell.validate();
@@ -386,33 +311,25 @@ class ocTabulator {
   }
 
   /**
-   * Save the row after validation. (stub for actual use)
-   * You may want to wire this up to your grid's Save button.
-   * This method validates all editable cells; highlights invalid, aborts if any fail.
+   * Save the row after validation.
+   * Validates all editable cells using Tabulator validation engine only;
+   * highlights invalid, aborts if any fail.
    * @param {object} row - Tabulator row component
-   * @returns {Promise|void}
+   * @returns {boolean} true if valid, false otherwise
    */
   saveRow(row) {
     let valid = true;
     row.getCells().forEach(cell => {
       const field = cell.getColumn().getField();
       if (field && field !== "actions") {
-        const cellEl = cell.getElement();
-        // Validate cell: both Tabulator's validator and underlying input (if editing)
         let tabValid = true;
         if (typeof cell.validate === "function") {
           const result = cell.validate();
           tabValid = (result === true) || (result && result.valid);
         }
-        // Try to check HTML5 validation if possible
-        let htmlValid = true;
-        const editorEl = cellEl.querySelector("input,select,textarea");
-        if (editorEl && editorEl.checkValidity) {
-          htmlValid = editorEl.checkValidity();
-        }
-        if (!tabValid || !htmlValid) {
+        const cellEl = cell.getElement();
+        if (!tabValid) {
           cellEl.classList.add("tabulator_invalid");
-          // Also add any legacy invalid cell class if used elsewhere in config
           if (this.config && this.config.prefix) {
             cellEl.classList.add(`${this.config.prefix}invalid-cell`);
           }
@@ -430,8 +347,6 @@ class ocTabulator {
       return false;
     }
     // Continue with save logic as needed
-    // (You may want to finish your save implementation here)
     return true;
   }
 }
-
