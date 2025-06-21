@@ -31,29 +31,19 @@
 <body>
 <h1>ocTabultorRowSelector Example</h1>
 
-<!-- Controls Container (simplified without select all buttons) -->
-<div id="table-controls"></div>
-
 <!-- Table Container -->
-<div>G</div>
-<div id="example-table" >
+<div id="example-table" ></div>
 
-</div>
 
-<!-- Summary Panel -->
-<div class="summary-panel">
-    <h3>Selection Summary</h3>
-    <p>Selected: <span id="selected-count">0</span> employees</p>
-    <p>Average Salary: $<span id="avg-salary">0</span></p>
-    <button id="send-email-btn" disabled>Send Email to Selected</button>
-</div>
+
+
 
 <script>
     // Sample Data
     const employeeData = [
-        {id: 1, name: "María González", department: "HR", salary: 65000, hire_date: "2020-05-15"},
+        {id: 1, name: "María González", department: "Engineering", salary: 65000, hire_date: "2020-05-15"},
         {id: 2, name: "Jürgen Müller", department: "Engineering", salary: 85000, hire_date: "2018-11-03"},
-        {id: 3, name: "Jean Dupont", department: "Marketing", salary: 72000, hire_date: "2019-08-21"},
+        {id: 3, name: "Jean Dupont", department: "Sales", salary: 72000, hire_date: "2019-08-21"},
         {id: 4, name: "Sofia Ricci", department: "Engineering", salary: 92000, hire_date: "2017-04-12"},
         {id: 5, name: "André Silva", department: "Sales", salary: 58000, hire_date: "2021-01-30"}
     ];
@@ -81,52 +71,32 @@
             {...ocTabulatorRowSelector.getCheckboxColumnDefinition()},
             {title: "Name", field: "name", headerFilter: true},
             {title: "Department", field: "department", headerFilter: true},
-            {title: "Salary", field: "salary", formatter: "money",
+            {title: "Salary<div id='saltot'>T</div>", field: "salary", formatter: "money",
                 formatterParams: {symbol: "$", precision: 0}, headerFilter: true},
             {title: "Hire Date", field: "hire_date", headerFilter: true}
-        ]
+        ],
+
     });
 
     // Initialize Checkbox Widget
     const checkboxWidget = new ocTabulatorRowSelector(table, {
-        controlsContainerId: 'table-controls',
         checkboxColumnTitle: 'Select',
         exportOptions: {
             pdf: true,
             excel: true,
             csv: true
-        }
+        },
+        totals: [
+            {field: "salary", op: "sum", subtotal: "department", decimals: 2, grandTotal: true},
+        ]
     });
 
     table.on("renderComplete", ocTabulatorUtil.toolbar );
 
+    // ocTabulatorRowSelectionChanged Event Listeners
+    table.element.addEventListener('ocTabulatorRowSelectionChanged', function(event) { console.log("Event Fired: ocTabulatorRowSelectionChanged", event.detail);});
+    table.element.addEventListener('ocTabulatorBulkSelectionChanged', function(event) { console.log("Event Fired: ocTabulatorBulkSelectionChanged", event.detail);});
 
-    // Event Listeners
-    table.element.addEventListener('checkboxChanged', updateSummary);
-    document.getElementById('send-email-btn').addEventListener('click', sendBulkEmails);
-
-    // Update summary panel
-    function updateSummary() {
-        const checkedData = checkboxWidget.getCheckedData();
-        const count = checkedData.length;
-        const avgSalary = count > 0
-            ? Math.round(checkedData.reduce((sum, emp) => sum + emp.salary, 0) / count)
-            : 0;
-
-        document.getElementById('selected-count').textContent = count;
-        document.getElementById('avg-salary').textContent = avgSalary.toLocaleString();
-        document.getElementById('send-email-btn').disabled = count === 0;
-    }
-
-    // Bulk action example
-    function sendBulkEmails() {
-        const selected = checkboxWidget.getCheckedData();
-        const names = selected.map(emp => emp.name).join(', ');
-        alert(`Preparing to email: ${names}`);
-    }
-
-    // Initial update
-    updateSummary();
 </script>
 </body>
 </html>

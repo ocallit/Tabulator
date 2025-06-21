@@ -571,23 +571,13 @@ class ocTabulatorRowSelector {
 
     /* region: Totals & Sub Totals */
     calculateAggregates() {
+        console.log("calculateAggregates", this.options.totals)
         const checkedRows = this.getCheckedRows();
         const aggregates = {};
         const subtotals = {};
-        const grandTotal = { value: 0, formatted: '0.00' };
 
-        // First verify all configured fields exist
-        const validTotals = this.options.totals.filter(config => {
-            try {
-                return this.table.getColumn(config.field) !== undefined;
-            } catch (e) {
-                console.warn(`Column ${config.field} not found for aggregation`);
-                return false;
-            }
-        });
-
-        // Calculate base aggregates
-        validTotals.forEach(config => {
+        this.options.totals.forEach(config => {
+            console.log("     In", config)
             const { field, op, subtotal, decimals = 2 } = config;
             let values = [];
 
@@ -598,11 +588,12 @@ class ocTabulatorRowSelector {
                     values.push(parseFloat(value));
                 }
             });
-
+            console.log("  ",field,  op,  subtotal)
             // Calculate aggregate
-            let result = 0;
+            let result;
             switch(op) {
                 case 'sum':
+                    console.log("SUM")
                     result = values.reduce((a, b) => a + b, 0);
                     break;
                 case 'avg':
@@ -626,6 +617,16 @@ class ocTabulatorRowSelector {
 
             // Format the result
             let formatted;
+            if (subtotal) {
+                if (!subtotals[subtotal]) subtotals[subtotal] = 0;
+                subtotals[subtotal] += result;
+
+                if (config.grandTotal) {
+                    if (!subtotals['grandTotal']) subtotals['grandTotal'] = 0;
+                    subtotals['grandTotal'] += result;
+                }
+            }
+
             if (config.subtotal === 'currency') {
                 formatted = result.toLocaleString(undefined, {
                     style: 'currency',
@@ -641,96 +642,82 @@ class ocTabulatorRowSelector {
             }
 
             aggregates[field] = { result, formatted };
-
-            // Calculate subtotals if specified
-            if (subtotal) {
-                if (!subtotals[subtotal]) {
-                    subtotals[subtotal] = {
-                        value: 0,
-                        formatted: '0.00',
-                        fields: []
-                    };
-                }
-                subtotals[subtotal].value += result;
-                subtotals[subtotal].fields.push(field);
-
-                // Format subtotal
-                subtotals[subtotal].formatted = subtotals[subtotal].value.toLocaleString(undefined, {
-                    minimumFractionDigits: decimals,
-                    maximumFractionDigits: decimals
-                });
-
-                // Add to grand total if specified
-                if (config.grandTotal) {
-                    grandTotal.value += result;
-                    grandTotal.formatted = grandTotal.value.toLocaleString(undefined, {
-                        minimumFractionDigits: decimals,
-                        maximumFractionDigits: decimals
-                    });
-                }
-            }
         });
 
-        return { aggregates, subtotals, grandTotal };
+        // Add subtotals to aggregates
+        Object.keys(subtotals).forEach(key => {
+            aggregates[key] = {
+                result: subtotals[key],
+                formatted: subtotals[key].toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                })
+            };
+        });
+
+        return aggregates;
     }
 
+    // Update header display with aggregates
     updateAggregateDisplay() {
-        if (!this.table || !this.table.getColumns) return;
-
-        const { aggregates, subtotals, grandTotal } = this.calculateAggregates();
+        console.log("updateAggregatesDisplay")
+        const aggregates = this.calculateAggregates();
         const columns = this.table.getColumns();
 
-        if (!columns || !columns.length) return;
-
-        // Clear all previous aggregate displays
-        columns.forEach(column => {
-            const currentDef = column.getDefinition();
-            if (currentDef.title) {
-                let cleanTitle = currentDef.title
-                    .replace(/<div class="aggregate-display">.*<\/div>/g, '')
-                    .replace(/<div class="subtotal-display">.*<\/div>/g, '')
-                    .replace(/<div class="grandtotal-display">.*<\/div>/g, '');
-                column.setTitle(cleanTitle);
-            }
-        });
-
-        // Update individual column aggregates
         columns.forEach(column => {
             const field = column.getField();
-            if (!field) return;
-
             const config = this.options.totals.find(t => t.field === field);
-            if (config && aggregates[field]) {
-                let title = column.getDefinition().title || '';
-                title += `<div class="aggregate-display">${aggregates[field].formatted}</div>`;
-                column.setTitle(title);
-            }
-        });
 
-        // Update subtotals display
-        Object.keys(subtotals).forEach(subtotalKey => {
-            const subtotal = subtotals[subtotalKey];
-            // Find the first column that contributes to this subtotal
-            const firstField = subtotal.fields[0];
-            if (firstField) {
-                const column = this.table.getColumn(firstField);
-                if (column) {
-                    let title = column.getDefinition().title || '';
-                    title += `<div class="subtotal-display">${subtotalKey}: ${subtotal.formatted}</div>`;
+            if (config) {
+                const aggregate = aggregates[field];
+                let title = column.getDefinition().title;
+
+                // Remove existing aggregate if any
+                title = title.replace(/<div class="aggregate-display">.*<\/div>/, '');
+
+                if (aggregate) {
+                    title += `<div class="aggregate-display">${aggregate.formatted}</div>`;
+                    console.log("title", title)
+                    console.log("column", column)
+                    console.log("column", column.getTable())
+
                     column.setTitle(title);
                 }
             }
         });
 
+        // Update subtotal and grand total displays if they exist
+        const subtotalFields = [...new Set(this.options.totals
+            .filter(t => t.subtotal)
+            .map(t => t.subtotal))];
+
+        subtotalFields.forEach(subtotal => {
+            const aggregate = aggregates[subtotal];
+            if (aggregate) {
+                // Find and update the first column that contributes to this subtotal
+                const firstContributor = this.options.totals.find(t => t.subtotal === subtotal);
+                if (firstContributor) {
+                    const column = this.table.getColumn(firstContributor.field);
+                    if (column) {
+                        let title = column.getDefinition().title;
+                        title = title.replace(/<div class="subtotal-display">.*<\/div>/, '');
+                        title += `<div class="subtotal-display">${subtotal}: ${aggregate.formatted}</div>`;
+                        column.setTitle(title);
+                    }
+                }
+            }
+        });
+
         // Update grand total if it exists
-        if (grandTotal.value > 0) {
-            // Find the first column that contributes to grand total
-            const firstGrandTotalField = this.options.totals.find(t => t.grandTotal)?.field;
-            if (firstGrandTotalField) {
-                const column = this.table.getColumn(firstGrandTotalField);
+        if (aggregates['grandTotal']) {
+            // Find and update the first column that contributes to grand total
+            const firstContributor = this.options.totals.find(t => t.grandTotal);
+            if (firstContributor) {
+                const column = this.table.getColumn(firstContributor.field);
                 if (column) {
-                    let title = column.getDefinition().title || '';
-                    title += `<div class="grandtotal-display">Grand Total: ${grandTotal.formatted}</div>`;
+                    let title = column.getDefinition().title;
+                    title = title.replace(/<div class="grandtotal-display">.*<\/div>/, '');
+                    title += `<div class="grandtotal-display">Grand Total: ${aggregates['grandTotal'].formatted}</div>`;
                     column.setTitle(title);
                 }
             }

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tom Select Demo</title>
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        .btn-clear {
+            background-color: #dc3545;
+            color: white;
+        }
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        .btn-info {
+            background-color: #17a2b8;
+            color: white;
+        }
+        .btn-info:hover {
+            background-color: #138496;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+        .info {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .current-values {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tom Select Demo</h1>
+        
+        <div class="form-group">
+            <label for="tom-select">Multi-Select with Custom Options:</label>
+            <select id="tom-select" multiple placeholder="Select people..."></select>
+        </div>
+
+        <div class="buttons">
+            <button class="btn-primary" onclick="setValidValues1()">Select: Suffi</button>
+            <button class="btn-secondary" onclick="setValidValues2()">Select: Tito & Mímosa</button>
+            <button class="btn-success" onclick="forceMimosa()">Force Mímosa</button>
+            <button class="btn-info" onclick="addOptions()">Add Options</button>
+            <button class="btn-warning" onclick="removeMimosaOption()">Remove Mímosa Option</button>
+        </div>
+
+        <div class="current-values">
+            <strong>Current Selected Values:</strong>
+            <div id="current-values-display">None</div>
+        </div>
+
+        <div class="info">
+            <h3>Features Demonstrated:</h3>
+            <ul>
+                <li>Initial values: Teisha (id: 9) and Tzar (id: 11)</li>
+                <li>Only accepts values from the valid options list</li>
+                <li>Built-in clear button (provided by Tom Select's clear_button plugin)</li>
+                <li>Individual remove buttons on each selected item (remove_button plugin)</li>
+                <li>Buttons to change selections (clear current + select new values)</li>
+                <li>Force Mímosa button (selects only if not already selected)</li>
+                <li>Add Options button (adds new options, replaces existing ones)</li>
+                <li>Remove Mímosa Option button (safely removes option and selection)</li>
+                <li>Case and accent insensitive search (diacritics support)</li>
+                <li>Multi-select with autocomplete</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+    <script>
+        // Initial valid values with both initial and additional options
+        let initialValidValues = [
+            {id: 1, label: "Tito"},
+            {id: 2, label: "Mímosa"},
+            {id: 4, label: "Suffi"},
+            {id: 9, label: "Teisha"},
+            {id: 11, label: "Tzar"},
+            // Additional test values for demonstration
+            {id: 12, label: "José"},
+            {id: 13, label: "María"},
+            {id: 14, label: "François"},
+            {id: 15, label: "Göran"}
+        ];
+
+        // Declare selectControl variable
+        let selectControl;
+
+        // Function to update the current values display
+        function updateCurrentValuesDisplay() {
+            if (!selectControl) return; // Safety check
+            
+            const selectedValues = selectControl.getValue();
+            const selectedItems = selectControl.items.map(id => {
+                const option = selectControl.options[id];
+                return option ? `${option.label} (id: ${id})` : `Unknown (id: ${id})`;
+            });
+            
+            document.getElementById('current-values-display').innerHTML = 
+                selectedItems.length > 0 ? selectedItems.join(', ') : 'None';
+        }
+
+        // Initialize Tom Select when page loads
+        window.addEventListener('load', function() {
+            selectControl = new TomSelect('#tom-select', {
+                // Configuration
+                valueField: 'id',
+                labelField: 'label',
+                searchField: ['label'],
+                
+                // Initial options (all valid values)
+                options: initialValidValues,
+                
+                // Initial selected items
+                items: [9, 11], // Teisha and Tzar
+                
+                // Multiple selection
+                maxItems: null,
+                
+                // Don't allow creating new items (only accept valid values)
+                create: false,
+                
+                // Case and accent insensitive search (diacritics support)
+                diacritics: true,
+                
+                // Keep dropdown open after selection for multi-select
+                closeAfterSelect: false,
+                
+                // Show selected items in dropdown for easy deselection
+                hideSelected: false,
+                
+                // Use Tom Select's built-in clear button and remove button plugins
+                plugins: ['clear_button', 'remove_button'],
+                
+                // Callbacks
+                onChange: function(values) {
+                    updateCurrentValuesDisplay();
+                },
+                
+                onInitialize: function() {
+                    updateCurrentValuesDisplay();
+                }
+            });
+        });
+
+        // Set selected values to just Suffi (clear current, then select Suffi)
+        function setValidValues1() {
+            if (!selectControl) return; // Safety check
+            
+            // Clear current selection
+            selectControl.clear();
+            
+            // Select Suffi (id: 4)
+            selectControl.addItem(4);
+        }
+
+        // Set selected values to Tito and Mímosa (clear current, then select both)
+        function setValidValues2() {
+            if (!selectControl) return; // Safety check
+            
+            // Clear current selection
+            selectControl.clear();
+            
+            // Select Tito (id: 1) and Mímosa (id: 2)
+            selectControl.addItem(1);
+            selectControl.addItem(2);
+        }
+
+        // Force Mímosa selection (only select if not already selected)
+        function forceMimosa() {
+            if (!selectControl) return; // Safety check
+            
+            // Check if Mímosa (id: 2) is already selected
+            const currentItems = selectControl.getValue();
+            const mimosaSelected = currentItems.includes('2') || currentItems.includes(2);
+            
+            if (!mimosaSelected) {
+                // Only add if not already selected
+                selectControl.addItem(2);
+            }
+            // Do nothing if already selected
+        }
+
+        // Add new options (with one replacement)
+        function addOptions() {
+            if (!selectControl) return; // Safety check
+            
+            const newOptions = [
+                {id: 111, label: "Ambar"},
+                {id: 112, label: "Tuxi"},
+                {id: 1, label: "Tito, se le recuerda"} // This will replace existing Tito
+            ];
+            
+            newOptions.forEach(option => {
+                selectControl.addOption(option);
+            });
+            
+            // Refresh to show the changes
+            selectControl.refreshOptions();
+        }
+
+        // Remove Mímosa option (safe removal)
+        function removeMimosaOption() {
+            if (!selectControl) return; // Safety check
+            
+            // First remove from selection if selected
+            if (selectControl.items.includes('2') || selectControl.items.includes(2)) {
+                selectControl.removeItem(2);
+            }
+            
+            // Then remove the option itself
+            selectControl.removeOption(2);
+            
+            // Refresh to show the changes
+            selectControl.refreshOptions();
+        }
+
+        // Demonstration of diacritics support
+        console.log('Diacritics support enabled - try searching for:');
+        console.log('- "jose" will find "José"');
+        console.log('- "maria" will find "María"');
+        console.log('- "francois" will find "François"');
+        console.log('- "goran" will find "Göran"');
+        console.log('- "mimosa" will find "Mímosa"');
+    </script>
+</body>
+</html>

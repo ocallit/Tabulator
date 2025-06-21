@@ -88,7 +88,47 @@
     color: #555;
 }
 
+/* region: ocTabulatorRowSelector Totals & subTotals */
+.aggregate-display, .subtotal-display, .grandtotal-display {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 3px;
+}
 
+.subtotal-display {
+    font-weight: bold;
+    color: #444;
+}
+
+.grandtotal-display {
+    font-weight: bold;
+    color: #000;
+}
+
+.aggregate-display {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 3px;
+}
+
+.subtotal-display {
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #444;
+    margin-top: 5px;
+    padding-top: 3px;
+    border-top: 1px solid #ddd;
+}
+
+.grandtotal-display {
+    font-size: 0.9em;
+    font-weight: bold;
+    color: #000;
+    margin-top: 5px;
+    padding-top: 3px;
+    border-top: 2px solid #888;
+}
+/* endregion */
 
 /* Ensure all checkboxes have pointer cursor */
 input[type="checkbox"] {
@@ -123,3 +163,6 @@ input[type="checkbox"] {
     }
 
 /* endregion */
+
+
+
