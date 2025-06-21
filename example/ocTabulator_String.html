@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabulator Custom Filter Test</title>
+    <link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .table-container { display: flex; gap: 20px; margin-top: 20px; }
+        .table-wrapper { flex: 1; border: 1px solid #ddd; padding: 10px; }
+        h2 { margin-top: 0; }
+        
+        /* Custom header filter styling */
+        .custom-filter-header {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            width: 100%;
+        }
+        .filter-type-select {
+            flex: 0 0 80px;
+            padding: 2px;
+            font-size: 12px;
+        }
+        .filter-input {
+            flex: 1;
+            min-width: 50px;
+            padding: 2px;
+        }
+        .clear-filter {
+            flex: 0 0 20px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: bold;
+            color: #999;
+        }
+        .clear-filter:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tabulator Custom Filter Test</h1>
+    
+    <div class="table-container">
+        <div class="table-wrapper">
+            <h2>With Custom Filter</h2>
+            <div id="custom-filter-table"></div>
+        </div>
+        <div class="table-wrapper">
+            <h2>With Native Filter</h2>
+            <div id="native-filter-table"></div>
+        </div>
+    </div>
+
+    <script>
+        // Custom filter function factory that returns different filter functions based on type
+        function createCustomFilter(filterType) {
+            return function(headerValue, rowValue, rowData, filterParams) {
+                if (!headerValue) return true; // No filter applied
+                
+                // Normalize strings by removing accents/diacritics and converting to lowercase
+                const normalizeString = (str) => {
+                    return str.toString()
+                        .normalize("NFD") // decompose accented characters
+                        .replace(/[\u0300-\u036f]/g, "") // remove diacritics
+                        .toLowerCase();
+                };
+
+                // Get normalized versions of the strings
+                const normalizedHeader = normalizeString(headerValue);
+                const normalizedRow = normalizeString(rowValue);
+
+                // Apply different filter types
+                switch(filterType) {
+                    case "equals":
+                        return normalizedRow === normalizedHeader;
+                    case "startsWith":
+                        return normalizedRow.startsWith(normalizedHeader);
+                    case "endsWith":
+                        return normalizedRow.endsWith(normalizedHeader);
+                    case "contains":
+                    default:
+                        return normalizedRow.includes(normalizedHeader);
+                }
+            };
+        }
+
+        // Custom header filter element with type selector, input, and clear button
+        function customFilterEditor(cell, onRendered, success, cancel, editorParams) {
+            const container = document.createElement("div");
+            container.className = "custom-filter-header";
+            
+            // Filter type dropdown
+            const typeSelect = document.createElement("select");
+            typeSelect.className = "filter-type-select";
+            typeSelect.innerHTML = `
+                <option value="contains">Contiene</option>
+                <option value="equals">Igual</option>
+                <option value="startsWith">Inicia con</option>
+                <option value="endsWith">Termina con</option>
+            `;
+            
+            // Filter input
+            const input = document.createElement("input");
+            input.className = "filter-input";
+            input.setAttribute("placeholder", "Filtrar...");
+            input.value = cell.getValue()?.value || "";
+            
+            // Set initial filter type if exists
+            if (cell.getValue()?.type) {
+                typeSelect.value = cell.getValue().type;
+            }
+            
+            // Clear button
+            const clearBtn = document.createElement("div");
+            clearBtn.className = "clear-filter";
+            clearBtn.innerHTML = "×";
+            clearBtn.title = "Clear filter";
+            
+            container.appendChild(typeSelect);
+            container.appendChild(input);
+            container.appendChild(clearBtn);
+            
+            function applyFilter() {
+                success({
+                    value: input.value,
+                    type: typeSelect.value
+                });
+            }
+            
+            // Event listeners
+            input.addEventListener("keyup", function(e) {
+                if (e.key === "Enter") {
+                    e.preventDefault(); // Prevent default form submission behavior
+                    applyFilter();
+                }
+            });
+            
+            // Use mousedown instead of click for clear button to prevent blur event issues
+            clearBtn.addEventListener("mousedown", function(e) {
+                e.preventDefault(); // Prevent input blur
+                input.value = "";
+                applyFilter();
+            });
+            
+            typeSelect.addEventListener("change", function() {
+                applyFilter();
+            });
+            
+            // Apply filter on blur (when clicking outside)
+            input.addEventListener("blur", function() {
+                setTimeout(applyFilter, 200); // Small delay to allow clear button click to process
+            });
+            
+            onRendered(function() {
+                input.focus();
+            });
+            
+            return container;
+        }
+
+        // Sample data with accented characters
+        const sampleData = [
+            { id: 1, name: "Café", country: "França" },
+            { id: 2, name: "Zoë", country: "België" },
+            { id: 3, name: "Jürgen", country: "Deutschland" },
+            { id: 4, name: "Héctor", country: "España" },
+            { id: 5, name: "México", country: "América" },
+            { id: 6, name: "Résumé", country: "Québec" },
+            { id: 7, name: "Håkon", country: "Norge" },
+            { id: 8, name: "São Paulo", country: "Brasil" },
+            { id: 9, name: "Łódź", country: "Polska" },
+            { id: 10, name: "İstanbul", country: "Türkiye" }
+        ];
+
+        // Create tables
+        const customFilterTable = new Tabulator("#custom-filter-table", {
+            data: sampleData,
+            layout: "fitColumns",
+            columns: [
+                { title: "ID", field: "id", width: 100 },
+                { 
+                    title: "Name", 
+                    field: "name",
+                    headerFilter: customFilterEditor,
+                    headerFilterFunc: function(headerValue, rowValue, rowData, filterParams) {
+                        // headerValue will be {value: inputValue, type: selectedType}
+                        if (!headerValue || !headerValue.value) return true;
+                        const filterFunc = createCustomFilter(headerValue.type);
+                        return filterFunc(headerValue.value, rowValue, rowData, filterParams);
+                    },
+                    headerFilterLiveFilter: false // Disable live filtering as we handle it manually
+                },
+                { 
+                    title: "Country", 
+                    field: "country",
+                    headerFilter: customFilterEditor,
+                    headerFilterFunc: function(headerValue, rowValue, rowData, filterParams) {
+                        if (!headerValue || !headerValue.value) return true;
+                        const filterFunc = createCustomFilter(headerValue.type);
+                        return filterFunc(headerValue.value, rowValue, rowData, filterParams);
+                    },
+                    headerFilterLiveFilter: false
+                }
+            ]
+        });
+
+        const nativeFilterTable = new Tabulator("#native-filter-table", {
+            data: sampleData,
+            layout: "fitColumns",
+            columns: [
+                { title: "ID", field: "id", width: 100 },
+                { title: "Name", field: "name", headerFilter: true },
+                { title: "Country", field: "country", headerFilter: true }
+            ]
+        });
+    </script>
+</body>
+</html>

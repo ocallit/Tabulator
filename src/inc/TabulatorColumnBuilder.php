@@ -26,6 +26,344 @@ class TabulatorColumnBuilder {
         $this->analyzeQuery();
     }
 
+    public function getTabulatorColumns(): array {
+        $columns = [];
+
+        // Add row number column
+        $columns[] = [
+          'formatter' => 'rownum',
+          'hozAlign' => 'center',
+          'width' => 60,
+          'resizable' => FALSE,
+        ];
+
+        // Add action column for row-based editing and deletion
+        $columns[] = [
+          'title' => 'Actions',
+          'field' => 'actions',
+          'formatter' => 'function(cell) { return userTable.actionFormatter(cell); }',
+          'width' => 120,
+          'hozAlign' => 'center',
+          'resizable' => FALSE,
+          'headerSort' => FALSE,
+          'cellClick' => 'function(e, cell) { userTable.onActionClick(e, cell); }',
+        ];
+
+        // Process field columns
+        foreach($this->fields as $fieldName => $fieldInfo) {
+            $column = [
+              'title' => $this->formatTitle($fieldName),
+              'field' => $fieldName,
+              'headerSort' => TRUE,
+            ];
+
+            // Set horizontal alignment
+            if($fieldInfo['isNumeric']) {
+                $column['hozAlign'] = 'right';
+            } elseif($fieldInfo['isDate']) {
+                $column['hozAlign'] = 'center';
+            } else {
+                $column['hozAlign'] = 'left';
+            }
+
+            // Add formatter
+            if($fieldInfo['isNumeric']) {
+                if($fieldInfo['decimals'] > 0) {
+                    $column['formatter'] = 'money';
+                    $column['formatterParams'] = [
+                      'decimal' => '.',
+                      'thousand' => ',',
+                      'symbol' => '',
+                      'precision' => $fieldInfo['decimals'],
+                    ];
+                } else {
+                    $column['formatter'] = 'number';
+                }
+            } elseif($fieldInfo['isDate']) {
+                $column['formatter'] = 'datetime';
+                $column['formatterParams'] = [
+                  'inputFormat' => $this->getDateInputFormat($fieldInfo['type']),
+                  'outputFormat' => $this->getDateOutputFormat($fieldInfo['type']),
+                ];
+            } elseif($fieldInfo['isForeignKey'] && isset($this->tableLookups[$fieldName])) {
+                $column['formatter'] = 'lookup';
+                $column['formatterParams'] = [
+                  'lookupObj' => '{LOOKUP_VALUES}',
+                ];
+            } elseif($fieldInfo['type'] === MYSQLI_TYPE_BLOB || $fieldInfo['type'] === MYSQLI_TYPE_LONG_BLOB) {
+                if($this->isBinaryContent($fieldInfo)) {
+                    $column['formatter'] = 'html';
+                    $column['formatterParams'] = [
+                      'binary' => TRUE,
+                    ];
+                } else {
+                    $column['formatter'] = 'textarea';
+                }
+            } elseif($fieldInfo['type'] === MYSQLI_TYPE_BIT) {
+                $column['formatter'] = 'tickCross';
+            } elseif($fieldInfo['length'] > 255) {
+                $column['formatter'] = 'textarea';
+            } else {
+                $column['formatter'] = 'plaintext';
+            }
+
+            // Add editor
+            if(!($fieldInfo['isPrimaryKey'] && $fieldInfo['isAutoIncrement'])) {
+                // Add editable function to check if row is being edited
+                $column['editable'] = 'function(cell) { return userTable.editingRows.has(cell.getRow()); }';
+
+                if($fieldInfo['isEnum'] && !empty($fieldInfo['enumValues'])) {
+                    $column['editor'] = 'select';
+                    $column['editorParams'] = [
+                      'values' => array_combine($fieldInfo['enumValues'], $fieldInfo['enumValues']),
+                    ];
+                } elseif($fieldInfo['isForeignKey'] && isset($this->tableLookups[$fieldName])) {
+                    $column['editor'] = 'select';
+                    $column['editorParams'] = [
+                      'values' => function() use ($fieldInfo) {
+                          return $this->getForeignKeyValues($this->tableLookups[$fieldInfo['name']]);
+                      },
+                    ];
+                } elseif($fieldInfo['isNumeric']) {
+                    $column['editor'] = 'number';
+                    $params = [];
+
+                    if($fieldInfo['decimals'] > 0) {
+                        $params['step'] = 0.1 ** $fieldInfo['decimals'];
+                    }
+
+                    if(!empty($params)) {
+                        $column['editorParams'] = $params;
+                    }
+                } elseif($fieldInfo['isDate']) {
+                    $column['editor'] = 'date';
+                    $column['editorParams'] = [
+                      'format' => $this->getDateInputFormat($fieldInfo['type']),
+                    ];
+                } elseif($fieldInfo['type'] === MYSQLI_TYPE_BLOB || $fieldInfo['type'] === MYSQLI_TYPE_LONG_BLOB) {
+                    if($this->isBinaryContent($fieldInfo)) {
+                        // Use custom editor for image upload
+                        $column['editor'] = <<<JS
+(cell, onRendered, success, cancel) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.style.width = "100%";
+
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Get the row data
+    const row = cell.getRow();
+    const rowData = row.getData();
+
+    userTable.uploadImageToServer(file, rowData).then(data => {
+      if (data && data.url) {
+        success(data.url); // updates cell value with the URL from server
+      } else {
+        alert("Image upload failed");
+        cancel();
+      }
+    }).catch((error) => {
+      console.error("Upload error:", error);
+      alert("Upload error");
+      cancel();
+    });
+  });
+
+  return input;
+}
+JS;
+                        // Update formatter to display images
+                        $column['formatter'] = <<<JS
+(cell) => {
+  const url = cell.getValue();
+  return url ? `<img src="\${url}" class="thumb">` : '';
+}
+JS;
+                    } elseif(preg_match('/attachment|document|file|pdf|doc/i', $fieldInfo['name'])) {
+                        // Use custom editor for document upload
+                        $column['editor'] = <<<JS
+(cell, onRendered, success, cancel) => {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls";
+  input.style.width = "100%";
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+  input.addEventListener("change", () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      alert("File is too large. Max 5 MB allowed.");
+      cancel();
+      return;
+    }
+
+    // Get the row data
+    const row = cell.getRow();
+    const rowData = row.getData();
+
+    userTable.uploadAttachmentToServer(file, rowData).then(url => {
+      if (url) {
+        success(url); // updates cell with the new URL
+      } else {
+        alert("Attachment upload failed");
+        cancel();
+      }
+    }).catch(() => {
+      alert("Upload error");
+      cancel();
+    });
+  });
+
+  return input;
+}
+JS;
+                        // Update formatter to display document links
+                        $column['formatter'] = <<<JS
+(cell) => {
+  const url = cell.getValue();
+  return url ? `<a href="\${url}" target="_blank" title="Open Attachment">📎</a>` : '';
+}
+JS;
+                    } else {
+                        $column['editor'] = 'textarea';
+                    }
+                } elseif($fieldInfo['type'] === MYSQLI_TYPE_BIT) {
+                    $column['editor'] = 'tickCross';
+                } elseif($fieldInfo['length'] > 255) {
+                    $column['editor'] = 'textarea';
+                } else {
+                    $column['editor'] = 'input';
+                }
+
+                // Add default value if available
+                if(isset($fieldInfo['defaultValue'])) {
+                    $column['editorParams'] = $column['editorParams'] ?? [];
+                    $column['editorParams']['defaultValue'] = $fieldInfo['defaultValue'];
+                }
+            }
+
+            // Add validators
+            $validators = $this->getValidators($fieldInfo);
+            if(!empty($validators)) {
+                $column['validator'] = $validators;
+            }
+
+            $columns[] = $column;
+        }
+
+        return $columns;
+    }
+
+    public function getTableStyles(): string {
+        return <<<CSS
+.tabulator-row.editing {
+    background-color: #fff8e1;
+}
+.tabulator-cell button {
+    margin: 0 2px;
+    cursor: pointer;
+}
+img.thumb {
+    height: 64px;
+    max-width: 100%;
+    object-fit: contain;
+}
+CSS;
+    }
+
+    public function getTabulatorInitialization(): string {
+        $columns = json_encode($this->getTabulatorColumns(), JSON_PRETTY_PRINT);
+
+        // Get the primary key field if available
+        $primaryKeyField = "id"; // Default
+        foreach ($this->fields as $fieldName => $fieldInfo) {
+            if ($fieldInfo['isPrimaryKey']) {
+                $primaryKeyField = $fieldName;
+                break;
+            }
+        }
+
+        return <<<JS
+// Create a new ocTabulator instance
+const userTable = new ocTabulator({
+    deleteIdentifierField: "$primaryKeyField" // Using the primary key field from the database
+});
+
+// Create the Tabulator instance
+const table = new Tabulator("#table", {
+    layout: "fitColumns",
+    responsiveLayout: "collapse",
+    reactiveData: true,
+    columnDefaults: {
+        resizable: true
+    },
+    columns: ${$columns},
+    placeholder: "No Data Available",
+    ajaxURL: window.location.pathname, // Assuming the current page handles AJAX requests
+    ajaxConfig: {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+    }
+});
+
+// Connect the ocTabulator and Tabulator instances (if setTable method exists)
+if (typeof userTable.setTable === 'function') {
+    userTable.setTable(table);
+}
+
+// Add a method to handle form data uploads for compatibility with the server
+userTable.fakeServerSave = function(data) {
+    return fetch(window.location.pathname, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+        },
+        body: JSON.stringify({
+            action: "save",
+            data: data
+        })
+    })
+    .then(response => response.json());
+};
+JS;
+    }
+
+    public function getHTMLOutput(): string {
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Table</title>
+    <link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css" rel="stylesheet">
+    <style>
+        \${$this->getTableStyles()}
+    </style>
+</head>
+<body>
+    <div id="table"></div>
+
+    <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
+    <script src="/assets/tabulator/js/ocTabulator.js"></script>
+    <script>
+        \${$this->getTabulatorInitialization()}
+    </script>
+</body>
+</html>
+HTML;
+    }
+
     protected function analyzeQuery(): void {
         try {
             $stmt = $this->sqlExecutor->prepareStatement($this->query['sql']);
@@ -359,433 +697,5 @@ class TabulatorColumnBuilder {
         return $validators;
     }
 
-    public function getTabulatorColumns(): array {
-        $columns = [];
 
-        // Add row number column
-        $columns[] = [
-          'formatter' => 'rownum',
-          'hozAlign' => 'center',
-          'width' => 60,
-          'resizable' => FALSE,
-        ];
-
-        // Add action column for row-based editing and deletion
-        $columns[] = [
-          'title' => 'Actions',
-          'field' => 'actions',
-          'formatter' => 'function(cell) { return userTable.actionFormatter(cell); }',
-          'width' => 120,
-          'hozAlign' => 'center',
-          'resizable' => FALSE,
-          'headerSort' => FALSE,
-          'cellClick' => 'function(e, cell) { userTable.onActionClick(e, cell); }',
-        ];
-
-        // Process field columns
-        foreach($this->fields as $fieldName => $fieldInfo) {
-            $column = [
-              'title' => $this->formatTitle($fieldName),
-              'field' => $fieldName,
-              'headerSort' => TRUE,
-            ];
-
-            // Set horizontal alignment
-            if($fieldInfo['isNumeric']) {
-                $column['hozAlign'] = 'right';
-            } elseif($fieldInfo['isDate']) {
-                $column['hozAlign'] = 'center';
-            } else {
-                $column['hozAlign'] = 'left';
-            }
-
-            // Add formatter
-            if($fieldInfo['isNumeric']) {
-                if($fieldInfo['decimals'] > 0) {
-                    $column['formatter'] = 'money';
-                    $column['formatterParams'] = [
-                      'decimal' => '.',
-                      'thousand' => ',',
-                      'symbol' => '',
-                      'precision' => $fieldInfo['decimals'],
-                    ];
-                } else {
-                    $column['formatter'] = 'number';
-                }
-            } elseif($fieldInfo['isDate']) {
-                $column['formatter'] = 'datetime';
-                $column['formatterParams'] = [
-                  'inputFormat' => $this->getDateInputFormat($fieldInfo['type']),
-                  'outputFormat' => $this->getDateOutputFormat($fieldInfo['type']),
-                ];
-            } elseif($fieldInfo['isForeignKey'] && isset($this->tableLookups[$fieldName])) {
-                $column['formatter'] = 'lookup';
-                $column['formatterParams'] = [
-                  'lookupObj' => '{LOOKUP_VALUES}',
-                ];
-            } elseif($fieldInfo['type'] === MYSQLI_TYPE_BLOB || $fieldInfo['type'] === MYSQLI_TYPE_LONG_BLOB) {
-                if($this->isBinaryContent($fieldInfo)) {
-                    $column['formatter'] = 'html';
-                    $column['formatterParams'] = [
-                      'binary' => TRUE,
-                    ];
-                } else {
-                    $column['formatter'] = 'textarea';
-                }
-            } elseif($fieldInfo['type'] === MYSQLI_TYPE_BIT) {
-                $column['formatter'] = 'tickCross';
-            } elseif($fieldInfo['length'] > 255) {
-                $column['formatter'] = 'textarea';
-            } else {
-                $column['formatter'] = 'plaintext';
-            }
-
-            // Add editor
-            if(!($fieldInfo['isPrimaryKey'] && $fieldInfo['isAutoIncrement'])) {
-                // Add editable function to check if row is being edited
-                $column['editable'] = 'function(cell) { return userTable.editingRows.has(cell.getRow()); }';
-
-                if($fieldInfo['isEnum'] && !empty($fieldInfo['enumValues'])) {
-                    $column['editor'] = 'select';
-                    $column['editorParams'] = [
-                      'values' => array_combine($fieldInfo['enumValues'], $fieldInfo['enumValues']),
-                    ];
-                } elseif($fieldInfo['isForeignKey'] && isset($this->tableLookups[$fieldName])) {
-                    $column['editor'] = 'select';
-                    $column['editorParams'] = [
-                      'values' => function() use ($fieldInfo) {
-                          return $this->getForeignKeyValues($this->tableLookups[$fieldInfo['name']]);
-                      },
-                    ];
-                } elseif($fieldInfo['isNumeric']) {
-                    $column['editor'] = 'number';
-                    $params = [];
-
-                    if($fieldInfo['decimals'] > 0) {
-                        $params['step'] = 0.1 ** $fieldInfo['decimals'];
-                    }
-
-                    if(!empty($params)) {
-                        $column['editorParams'] = $params;
-                    }
-                } elseif($fieldInfo['isDate']) {
-                    $column['editor'] = 'date';
-                    $column['editorParams'] = [
-                      'format' => $this->getDateInputFormat($fieldInfo['type']),
-                    ];
-                } elseif($fieldInfo['type'] === MYSQLI_TYPE_BLOB || $fieldInfo['type'] === MYSQLI_TYPE_LONG_BLOB) {
-                    if($this->isBinaryContent($fieldInfo)) {
-                        // Use custom editor for image upload
-                        $column['editor'] = <<<JS
-(cell, onRendered, success, cancel) => {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = "image/*";
-  input.style.width = "100%";
-
-  input.addEventListener("change", () => {
-    const file = input.files[0];
-    if (!file) return;
-
-    // Get the row data
-    const row = cell.getRow();
-    const rowData = row.getData();
-
-    userTable.uploadImageToServer(file, rowData).then(data => {
-      if (data && data.url) {
-        success(data.url); // updates cell value with the URL from server
-      } else {
-        alert("Image upload failed");
-        cancel();
-      }
-    }).catch((error) => {
-      console.error("Upload error:", error);
-      alert("Upload error");
-      cancel();
-    });
-  });
-
-  return input;
-}
-JS;
-                        // Update formatter to display images
-                        $column['formatter'] = <<<JS
-(cell) => {
-  const url = cell.getValue();
-  return url ? `<img src="\${url}" class="thumb">` : '';
-}
-JS;
-                    } elseif(preg_match('/attachment|document|file|pdf|doc/i', $fieldInfo['name'])) {
-                        // Use custom editor for document upload
-                        $column['editor'] = <<<JS
-(cell, onRendered, success, cancel) => {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".pdf,.doc,.docx,.txt,.csv,.xlsx,.xls";
-  input.style.width = "100%";
-
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-
-  input.addEventListener("change", () => {
-    const file = input.files[0];
-    if (!file) return;
-
-    if (file.size > MAX_FILE_SIZE) {
-      alert("File is too large. Max 5 MB allowed.");
-      cancel();
-      return;
-    }
-
-    // Get the row data
-    const row = cell.getRow();
-    const rowData = row.getData();
-
-    userTable.uploadAttachmentToServer(file, rowData).then(url => {
-      if (url) {
-        success(url); // updates cell with the new URL
-      } else {
-        alert("Attachment upload failed");
-        cancel();
-      }
-    }).catch(() => {
-      alert("Upload error");
-      cancel();
-    });
-  });
-
-  return input;
-}
-JS;
-                        // Update formatter to display document links
-                        $column['formatter'] = <<<JS
-(cell) => {
-  const url = cell.getValue();
-  return url ? `<a href="\${url}" target="_blank" title="Open Attachment">📎</a>` : '';
-}
-JS;
-                    } else {
-                        $column['editor'] = 'textarea';
-                    }
-                } elseif($fieldInfo['type'] === MYSQLI_TYPE_BIT) {
-                    $column['editor'] = 'tickCross';
-                } elseif($fieldInfo['length'] > 255) {
-                    $column['editor'] = 'textarea';
-                } else {
-                    $column['editor'] = 'input';
-                }
-
-                // Add default value if available
-                if(isset($fieldInfo['defaultValue'])) {
-                    $column['editorParams'] = $column['editorParams'] ?? [];
-                    $column['editorParams']['defaultValue'] = $fieldInfo['defaultValue'];
-                }
-            }
-
-            // Add validators
-            $validators = $this->getValidators($fieldInfo);
-            if(!empty($validators)) {
-                $column['validator'] = $validators;
-            }
-
-            $columns[] = $column;
-        }
-
-        return $columns;
-    }
-
-    // These methods are no longer needed as we're using the ocTabulator class's methods instead
-    // They are kept here as comments for reference
-
-    /*
-    public function getActionFormatter(): string {
-        return <<<JS
-function actionFormatter(cell) {
-    const row = cell.getRow();
-    return editingRows.has(row)
-        ? '<button class="save-btn">💾</button> <button class="cancel-btn">✖️</button>'
-        : '<button class="edit-btn">✏️</button>';
-}
-JS;
-    }
-
-    public function getActionClickHandler(): string {
-        return <<<JS
-function onActionClick(e, cell) {
-    const row = cell.getRow();
-
-    if (e.target.classList.contains("edit-btn")) {
-        const originalData = JSON.parse(JSON.stringify(row.getData()));
-        editingRows.set(row, originalData);
-        row.getElement().classList.add("editing");
-
-        row.getCells().forEach(c => {
-            const field = c.getColumn().getField();
-            if (field && field !== "actions") c.edit(true);
-        });
-
-        refreshActionCell(row);
-    }
-
-    else if (e.target.classList.contains("cancel-btn")) {
-        const originalData = editingRows.get(row);
-        editingRows.delete(row);
-        row.getElement().classList.remove("editing");
-
-        row.getCells().forEach(c => c.cancelEdit && c.cancelEdit());
-        row.update(originalData).then(() => refreshActionCell(row));
-    }
-
-    else if (e.target.classList.contains("save-btn")) {
-        const isValid = row.getCells().every(c => {
-            const field = c.getColumn().getField();
-            if (field && field !== "actions") {
-                const result = c.validate();
-                return result === true || result.valid;
-            }
-            return true;
-        });
-
-        if (!isValid) {
-            alert("Validation failed");
-            return;
-        }
-
-        const updatedData = row.getData();
-
-        saveRowToServer(updatedData).then(resp => {
-            if (resp.success) {
-                editingRows.delete(row);
-                row.getElement().classList.remove("editing");
-                row.update(resp.data || updatedData).then(() => {
-                    refreshActionCell(row);
-                });
-            } else {
-                alert("Server error: " + resp.message);
-            }
-        }).catch(() => alert("Network/server error"));
-    }
-}
-
-function refreshActionCell(row) {
-    const cell = row.getCell("actions");
-    if (cell) cell.getElement().innerHTML = actionFormatter(cell);
-}
-
-function saveRowToServer(data) {
-    return fetch("/api/save-row", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.json());
-}
-JS;
-    }
-    */
-
-    public function getTableStyles(): string {
-        return <<<CSS
-.tabulator-row.editing {
-    background-color: #fff8e1;
-}
-.tabulator-cell button {
-    margin: 0 2px;
-    cursor: pointer;
-}
-img.thumb {
-    height: 64px;
-    max-width: 100%;
-    object-fit: contain;
-}
-CSS;
-    }
-
-    public function getTabulatorInitialization(): string {
-        $columns = json_encode($this->getTabulatorColumns(), JSON_PRETTY_PRINT);
-
-        // Get the primary key field if available
-        $primaryKeyField = "id"; // Default
-        foreach ($this->fields as $fieldName => $fieldInfo) {
-            if ($fieldInfo['isPrimaryKey']) {
-                $primaryKeyField = $fieldName;
-                break;
-            }
-        }
-
-        return <<<JS
-// Create a new ocTabulator instance
-const userTable = new ocTabulator({
-    deleteIdentifierField: "$primaryKeyField" // Using the primary key field from the database
-});
-
-// Create the Tabulator instance
-const table = new Tabulator("#table", {
-    layout: "fitColumns",
-    responsiveLayout: "collapse",
-    reactiveData: true,
-    columnDefaults: {
-        resizable: true
-    },
-    columns: ${$columns},
-    placeholder: "No Data Available",
-    ajaxURL: window.location.pathname, // Assuming the current page handles AJAX requests
-    ajaxConfig: {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-        }
-    }
-});
-
-// Connect the ocTabulator and Tabulator instances (if setTable method exists)
-if (typeof userTable.setTable === 'function') {
-    userTable.setTable(table);
-}
-
-// Add a method to handle form data uploads for compatibility with the server
-userTable.fakeServerSave = function(data) {
-    return fetch(window.location.pathname, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "XMLHttpRequest"
-        },
-        body: JSON.stringify({
-            action: "save",
-            data: data
-        })
-    })
-    .then(response => response.json());
-};
-JS;
-    }
-
-    public function getHTMLOutput(): string {
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Table</title>
-    <link href="https://unpkg.com/tabulator-tables@6.3.0/dist/css/tabulator.min.css" rel="stylesheet">
-    <style>
-        \${$this->getTableStyles()}
-    </style>
-</head>
-<body>
-    <div id="table"></div>
-
-    <script src="https://unpkg.com/tabulator-tables@6.3.0/dist/js/tabulator.min.js"></script>
-    <script src="/assets/tabulator/js/ocTabulator.js"></script>
-    <script>
-        \${$this->getTabulatorInitialization()}
-    </script>
-</body>
-</html>
-HTML;
-    }
 }

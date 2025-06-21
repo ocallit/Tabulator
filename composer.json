@@ -1,12 +1,11 @@
 {
   "name": "ocallit/tabulator",
-  "description": "Util functions for tabulator",
+  "description": "Utils for tabulator: mysql query to column definition, natural sort, filters with operators",
   "type": "library",
   "license": "MIT",
   "require": {
     "php": "^8.2",
     "ocallit/sqler": "*",
-    "slowprog/composer-copy-file": "~0.3",
     "ext-mysqli": "*"
   },
   "require-dev": {
@@ -16,13 +15,14 @@
     "ocallit/sqler": "source"
   },
   "config": {
+    "classmap-authoritative": true,
     "optimize-autoloader": true,
     "sort-packages": true
   },
   "autoload": {
-    "psr-4": {
-      "Ocallit\\Tabulator\\": "src/inc/"
-    }
+    "classmap": [
+      "src/inc/"
+    ]
   },
   "autoload-dev": {
     "psr-4": {

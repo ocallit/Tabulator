@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabulator Checkbox Widget Demo</title>
+    <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+    <link href="../src/public/assets/css/ocTabulator.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .table-container { margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .summary-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+    </style>
+
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.20/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+
+    <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v6.0.0-beta3/css/all.css">
+    <script src="../src/public/assets/js/ocTabulatorUtil.js"></script>
+    <script src="../src/public/assets/js/ocTabulatorRowSelector.js"></script>
+</head>
+<body>
+<h1>ocTabultorRowSelector Example</h1>
+
+<!-- Controls Container (simplified without select all buttons) -->
+<div id="table-controls"></div>
+
+<!-- Table Container -->
+<div>G</div>
+<div id="example-table" >
+
+</div>
+
+<!-- Summary Panel -->
+<div class="summary-panel">
+    <h3>Selection Summary</h3>
+    <p>Selected: <span id="selected-count">0</span> employees</p>
+    <p>Average Salary: $<span id="avg-salary">0</span></p>
+    <button id="send-email-btn" disabled>Send Email to Selected</button>
+</div>
+
+<script>
+    // Sample Data
+    const employeeData = [
+        {id: 1, name: "María González", department: "HR", salary: 65000, hire_date: "2020-05-15"},
+        {id: 2, name: "Jürgen Müller", department: "Engineering", salary: 85000, hire_date: "2018-11-03"},
+        {id: 3, name: "Jean Dupont", department: "Marketing", salary: 72000, hire_date: "2019-08-21"},
+        {id: 4, name: "Sofia Ricci", department: "Engineering", salary: 92000, hire_date: "2017-04-12"},
+        {id: 5, name: "André Silva", department: "Sales", salary: 58000, hire_date: "2021-01-30"}
+    ];
+
+    // Initialize Tabulator
+    const table = new Tabulator("#example-table", {
+        clipboard:true,
+        clipboardCopyConfig:{
+            columnHeaders:true, //do not include column headers in clipboard output
+            columnGroups:false, //do not include column groups in column headers for printed table
+            rowHeaders:false, //do not include row headers in clipboard output
+            rowGroups:true, //do not include row groups in clipboard output
+            columnCalcs:true, //do not include column calculation rows in clipboard output
+            dataTree:false, //do not include data tree in printed table
+            formatCells:true, //show raw cell values without formatter
+        },
+
+        pagination: "local",           // enable pagination
+        paginationSize: 10,           // rows per page
+        paginationSizeSelector: [5, 10, 20, 50], // optional dropdown for sizes
+        data: employeeData,
+        layout: "fitColumns",
+        columns: [
+            {formatter: "rownum", hozAlign: "center", width: 50},
+            {...ocTabulatorRowSelector.getCheckboxColumnDefinition()},
+            {title: "Name", field: "name", headerFilter: true},
+            {title: "Department", field: "department", headerFilter: true},
+            {title: "Salary", field: "salary", formatter: "money",
+                formatterParams: {symbol: "$", precision: 0}, headerFilter: true},
+            {title: "Hire Date", field: "hire_date", headerFilter: true}
+        ]
+    });
+
+    // Initialize Checkbox Widget
+    const checkboxWidget = new ocTabulatorRowSelector(table, {
+        controlsContainerId: 'table-controls',
+        checkboxColumnTitle: 'Select',
+        exportOptions: {
+            pdf: true,
+            excel: true,
+            csv: true
+        }
+    });
+
+    table.on("renderComplete", ocTabulatorUtil.toolbar );
+
+
+    // Event Listeners
+    table.element.addEventListener('checkboxChanged', updateSummary);
+    document.getElementById('send-email-btn').addEventListener('click', sendBulkEmails);
+
+    // Update summary panel
+    function updateSummary() {
+        const checkedData = checkboxWidget.getCheckedData();
+        const count = checkedData.length;
+        const avgSalary = count > 0
+            ? Math.round(checkedData.reduce((sum, emp) => sum + emp.salary, 0) / count)
+            : 0;
+
+        document.getElementById('selected-count').textContent = count;
+        document.getElementById('avg-salary').textContent = avgSalary.toLocaleString();
+        document.getElementById('send-email-btn').disabled = count === 0;
+    }
+
+    // Bulk action example
+    function sendBulkEmails() {
+        const selected = checkboxWidget.getCheckedData();
+        const names = selected.map(emp => emp.name).join(', ');
+        alert(`Preparing to email: ${names}`);
+    }
+
+    // Initial update
+    updateSummary();
+</script>
+</body>
+</html>

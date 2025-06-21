@@ -1,0 +1,125 @@
+
+/* Style for all header control icons */
+.tabulator-header .tabulator-col .header-control-icon {
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0.7;
+}
+
+.tabulator-header .tabulator-col .header-control-icon:hover {
+    opacity: 1;
+    background-color: #f0f0f0;
+    transform: scale(1.1);
+}
+
+/* Specific style for eye icon */
+.tabulator-header .tabulator-col .view-all-icon {
+    color: #555;
+}
+
+/* Style for checked icon */
+.tabulator-header .tabulator-col .checked-icon {
+    color: #28a745; /* Green */
+}
+
+/* Style for unchecked icon */
+.tabulator-header .tabulator-col .unchecked-icon {
+    color: #6c757d; /* Gray */
+}
+
+/* Base button styles */
+.header-filter-btn {
+    cursor: pointer;
+    font-size: 1.1em;
+    transition: all 0.2s;
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0.7;
+}
+
+.header-filter-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* Active state */
+.header-filter-btn.active {
+    opacity: 1;
+    background-color: #e0e0e0;
+    box-shadow: 0 0 0 2px #b0b0b0;
+}
+
+/* Specific button colors */
+.view-all-btn {
+    color: #555;
+}
+
+.checked-btn {
+    color: #28a745; /* Green */
+}
+
+.unchecked-btn {
+    color: #6c757d; /* Gray */
+}
+
+.header-filter-btn {
+    cursor: pointer;
+    transition: all 0.2s;
+    padding: 2px;
+    border-radius: 3px;
+    opacity: 0.7;
+}
+
+.header-filter-btn:hover {
+    opacity: 1;
+    background-color: #f0f0f0;
+    transform: scale(1.1);
+}
+
+.header-filter-btn.active {
+    opacity: 1;
+    background-color: #e0e0e0;
+    box-shadow: 0 0 0 2px #b0b0b0;
+}
+
+.view-all-btn {
+    color: #555;
+}
+
+
+
+/* Ensure all checkboxes have pointer cursor */
+input[type="checkbox"] {
+    cursor: pointer;
+}
+
+/* region: Footer Toolbar */
+    .ocExporter_toolbar {
+        display: inline-flex;
+        gap: 0.5em;
+        margin-left: 1em;
+        align-items: center;
+    }
+
+    .ocExporter_btn {
+        background: none;
+        border: none;
+        font-size: 1.1em;
+        padding: 0.4em;
+        cursor: pointer;
+        color: #333;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+    }
+
+    .ocExporter_btn:hover {
+        background: #e2e6ea;
+    }
+
+    .ocExporter_btn:active {
+        background: #d6d8db;
+    }
+
+/* endregion */
