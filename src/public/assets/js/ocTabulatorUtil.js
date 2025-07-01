@@ -18,10 +18,10 @@ var ocTabulatorUtil = {
         const typeSelect = document.createElement("select");
         typeSelect.className = "filter-type-select";
         typeSelect.innerHTML = `
-                <option value="eq">Igual</option>
-                <option value="ne">Diferente</option>
-                <option value="lt">Menor</option>
-                <option value="gt">Mayor</option>
+                <option value="eq">=</option>
+                <option value="ne">&ne;</option>
+                <option value="lt">&lt;</option>
+                <option value="gt">></option>
                 <option value="nu">Vacío</option>
                 <option value="nn">Con valor</option>
             `;
@@ -30,7 +30,7 @@ var ocTabulatorUtil = {
         const input = document.createElement("input");
         input.className = "filter-input";
         input.setAttribute("placeholder", "Valor...");
-        input.type = "number";
+        input.type = "text";
         input.step = "any";
 
         // Set initial values if they exist
@@ -167,11 +167,11 @@ var ocTabulatorUtil = {
         const typeSelect = document.createElement("select");
         typeSelect.className = "filter-type-select";
         typeSelect.innerHTML = `
-                <option value="contains">Contiene</option>
-                <option value="startsWith">Inicia con</option>
-                <option value="endsWith">Termina con</option>
-                <option value="eq">Igual</option>
-                <option value="ne">Diferente</option>
+                <option value="contains">Cont</option>
+                <option value="startsWith">Ini </option>
+                <option value="endsWith">Fin</option>
+                <option value="eq">=</option>
+                <option value="ne">&ne;</option>
             `;
 
         // Filter input

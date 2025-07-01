@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabulator Checkbox Widget with Advanced Filters Demo</title>
+    <link href="https://unpkg.com/tabulator-tables@6.3.1/dist/css/tabulator.min.css" rel="stylesheet">
+    <link href="../src/public/assets/css/ocTabulator.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .table-container { margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; }
+        .summary-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        
+        /* Global search styling */
+        .global-search-container {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .search-input-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .global-search-input {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .global-search-input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+        }
+        
+        .search-clear-btn {
+            background: #f8f9fa;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 4px;
+            width: auto;
+            height: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        
+        .search-clear-btn:hover {
+            background: #e9ecef;
+            color: #333;
+            border-color: #adb5bd;
+        }
+        
+        .search-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        /* Custom header filter styling from ocTabulatorUtil */
+        .custom-filter-header {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            width: 100%;
+            flex-wrap: wrap; /* Allow wrapping */
+        }
+        .filter-type-select {
+            flex: 0 0 80px;
+            min-width: 70px;
+            padding: 2px;
+            font-size: 11px;
+        }
+        .filter-input {
+            flex: 1;
+            min-width: 40px;
+            padding: 2px;
+        }
+        .clear-filter {
+            flex: 0 0 18px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: bold;
+            color: #999;
+        }
+        .clear-filter:hover {
+            color: #333;
+        }
+    </style>
+
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.20/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/tabulator-tables@6.3.1/dist/js/tabulator.min.js"></script>
+
+    <link rel="stylesheet" href="https://pro.fontawesome.com/releases/v6.0.0-beta3/css/all.css">
+    <script src="../src/public/assets/js/ocTabulatorUtil.js"></script>
+    <script src="../src/public/assets/js/ocTabulatorRowSelector.js"></script>
+</head>
+<body>
+<h1>ocTabultorRowSelector with Advanced Filters Example</h1>
+
+<!-- Global Search Filter -->
+<div class="global-search-container">
+    <label class="search-label" for="global-search">🔍 Global Search (searches all columns):</label>
+    <div class="search-input-container">
+        <input type="text" id="global-search" class="global-search-input" 
+               placeholder="Type to search across all columns..." 
+               oninput="handleGlobalSearch(this.value)">
+        <button class="search-clear-btn" id="search-clear" onclick="clearGlobalSearch()" title="Clear search">
+            &times;
+        </button>
+    </div>
+</div>
+
+<!-- Table Container -->
+<div id="example-table" ></div>
+
+<script>
+    // Enhanced sample data with more varied data for testing filters
+    const employeeData = [
+        {id: 1, name: "María González", department: "Engineering", salary: 65000, hire_date: "2020-05-15", score: 8.5, discount: 10},
+        {id: 2, name: "Jürgen Müller", department: "Engineering", salary: 85000, hire_date: "2018-11-03", score: 9.2, discount: null},
+        {id: 3, name: "Jean Dupont", department: "Sales", salary: 72000, hire_date: "2019-08-21", score: 7.8, discount: 15},
+        {id: 4, name: "Sofia Ricci", department: "Engineering", salary: 92000, hire_date: "2017-04-12", score: 9.5, discount: 5},
+        {id: 5, name: "André Silva", department: "Sales", salary: 58000, hire_date: "2021-01-30", score: 6.9, discount: 20},
+        {id: 6, name: "Chen Wei", department: "Marketing", salary: 75000, hire_date: "2019-12-10", score: 8.1, discount: 12},
+        {id: 7, name: "Fatima Al-Zahra", department: "HR", salary: 68000, hire_date: "2020-03-25", score: 8.7, discount: 8},
+        {id: 8, name: "Oleksandr Petrov", department: "Engineering", salary: 78000, hire_date: "2018-07-14", score: 8.9, discount: null},
+        {id: 9, name: "Isabella Rodriguez", department: "Sales", salary: 64000, hire_date: "2021-09-05", score: 7.5, discount: 18},
+        {id: 10, name: "Yuki Tanaka", department: "Marketing", salary: 71000, hire_date: "2019-06-18", score: 8.3, discount: 10},
+        {id: 11, name: "", department: "IT", salary: 0, hire_date: "", score: null, discount: ""},
+        {id: 12, name: null, department: "Finance", salary: null, hire_date: null, score: 0, discount: undefined}
+    ];
+
+    // Initialize Tabulator with advanced filters from ocTabulatorUtil
+    const table = new Tabulator("#example-table", {
+        clipboard: true,
+        clipboardCopyConfig: {
+            columnHeaders: true,
+            columnGroups: false,
+            rowHeaders: false,
+            rowGroups: true,
+            columnCalcs: true,
+            dataTree: false,
+            formatCells: true,
+        },
+
+        // Print configuration - default to landscape
+        printConfig: {
+            orientation: "landscape",
+            title: "Employee Data Report"
+        },
+
+        // Responsive configuration
+        responsiveLayout: "collapse", // "hide" or "collapse"
+        responsiveLayoutCollapseStartOpen: true,
+        responsiveLayoutCollapseUseFormatters: true,
+
+        pagination: "local",
+        paginationSize: 10,
+        paginationSizeSelector: [5, 10, 20, 50],
+        data: employeeData,
+        layout: "fitColumns",
+        columns: [
+            {formatter: "rownum", hozAlign: "center", width: 50, responsive: 0}, // Never hide
+            {...ocTabulatorRowSelector.getCheckboxColumnDefinition(), responsive: 0}, // Never hide
+            {
+                title: "Name", 
+                field: "name", 
+                headerFilter: ocTabulatorUtil.headerFilterString,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncString,
+                headerFilterLiveFilter: false,
+                sorter: ocTabulatorUtil.stringSorter,
+                responsive: 0, // Never hide - most important
+                minWidth: 120
+            },
+            {
+                title: "Department", 
+                field: "department", 
+                headerFilter: ocTabulatorUtil.headerFilterString,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncString,
+                headerFilterLiveFilter: false,
+                sorter: ocTabulatorUtil.stringSorter,
+                responsive: 1, // Hide on smaller screens
+                minWidth: 100
+            },
+            {
+                title: "Salary<div id='saltot'>T</div>", 
+                field: "salary", 
+                formatter: "money",
+                formatterParams: {symbol: "$", precision: 0}, 
+                headerFilter: ocTabulatorUtil.headerFilterNumber,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncNumber,
+                headerFilterLiveFilter: false,
+                responsive: 2, // Hide after department
+                minWidth: 100
+            },
+            {
+                title: "Hire Date", 
+                field: "hire_date", 
+                headerFilter: ocTabulatorUtil.headerFilterYmdDate,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncYmdDate,
+                headerFilterLiveFilter: false,
+                responsive: 4, // Hide on mobile
+                minWidth: 110
+            },
+            {
+                title: "Score", 
+                field: "score", 
+                headerFilter: ocTabulatorUtil.headerFilterNumber,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncNumber,
+                headerFilterLiveFilter: false,
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    return value === null || value === "" || value === undefined ? 
+                        "N/A" : value.toFixed(1);
+                },
+                responsive: 5, // Hide first on small screens
+                minWidth: 80
+            },
+            {
+                title: "Discount %", 
+                field: "discount", 
+                headerFilter: ocTabulatorUtil.headerFilterNumber,
+                headerFilterFunc: ocTabulatorUtil.headerFilterFuncNumber,
+                headerFilterLiveFilter: false,
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    return value === null || value === "" || value === undefined ? 
+                        "N/A" : value + "%";
+                },
+                responsive: 6, // Hide first on mobile
+                minWidth: 90
+            }
+        ],
+    });
+
+    // Initialize Checkbox Widget
+    const checkboxWidget = new ocTabulatorRowSelector(table, {
+        checkboxColumnTitle: 'Select',
+        exportOptions: {
+            pdf: true,
+            excel: true,
+            csv: true
+        },
+        totals: [
+            {field: "salary", op: "sum", subtotal: "department", decimals: 2, grandTotal: true},
+        ]
+    });
+
+    // Add export toolbar after table is rendered
+    table.on("renderComplete", ocTabulatorUtil.toolbar);
+
+    // Event Listeners for checkbox selection changes
+    table.element.addEventListener('ocTabulatorRowSelectionChanged', function(event) { 
+        console.log("Event Fired: ocTabulatorRowSelectionChanged", event.detail);
+    });
+    
+    table.element.addEventListener('ocTabulatorBulkSelectionChanged', function(event) { 
+        console.log("Event Fired: ocTabulatorBulkSelectionChanged", event.detail);
+    });
+
+    // Global search function that searches across all columns
+    function handleGlobalSearch(searchTerm) {
+        if (!searchTerm || searchTerm.trim() === '') {
+            // Clear all filters if search is empty
+            table.clearFilter();
+            return;
+        }
+
+        // Normalize search term (remove accents, convert to lowercase)
+        const normalizedTerm = searchTerm.toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+        // Create a custom filter function that searches across all columns
+        table.setFilter(function(data, filterParams) {
+            // Get all column fields that should be searchable
+            const searchableFields = ['name', 'department', 'salary', 'hire_date', 'score', 'discount'];
+            
+            // Check each field for the search term
+            for (let field of searchableFields) {
+                let fieldValue = data[field];
+                
+                // Handle null/undefined values
+                if (fieldValue === null || fieldValue === undefined) {
+                    continue;
+                }
+                
+                // Convert to string and normalize
+                let normalizedValue = String(fieldValue).toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '');
+                
+                // Check if the normalized value contains the search term
+                if (normalizedValue.includes(normalizedTerm)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        });
+    }
+
+    // Function to clear global search
+    function clearGlobalSearch() {
+        const searchInput = document.getElementById('global-search');
+        searchInput.value = '';
+        handleGlobalSearch('');
+        searchInput.focus();
+    }
+
+    // Optional: Add Enter key support for better UX
+    document.getElementById('global-search').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.blur(); // Remove focus to trigger any pending events
+        }
+    });
+
+    // Optional: Clear search on Escape key
+    document.getElementById('global-search').addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            clearGlobalSearch();
+        }
+    });
+
+</script>
+</body>
+</html>
