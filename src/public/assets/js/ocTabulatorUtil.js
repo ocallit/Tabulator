@@ -22,8 +22,8 @@ var ocTabulatorUtil = {
                 <option value="ne">&ne;</option>
                 <option value="lt">&lt;</option>
                 <option value="gt">></option>
-                <option value="nu">Vacío</option>
-                <option value="nn">Con valor</option>
+                <option value="nu">&empty;</option>
+                <option value="nn">#</option>
             `;
 
         // Filter input (only shown for numeric comparisons)
@@ -31,7 +31,18 @@ var ocTabulatorUtil = {
         input.className = "filter-input";
         input.setAttribute("placeholder", "Valor...");
         input.type = "text";
-        input.step = "any";
+        input.oninput=
+            "if(isNaN(this.value.replaceAll(',',''))) this.setCustomValidity('Debe ser númerico'); else this.setCustomValidity('');"
+            "this.reportValidity();";
+        const column = cell.getColumn();
+        const columnDef = column.getDefinition();
+        if (columnDef.formatter && (columnDef.formatter === "integer" || columnDef.formatter === "int")) {
+            input.inputmode = "numeric";
+        } else {
+            input.inputmode = "decimal";
+        }
+
+
 
         // Set initial values if they exist
         const currentValue = cell.getValue();
@@ -93,7 +104,7 @@ var ocTabulatorUtil = {
         });
 
         input.addEventListener("blur", function() {
-            setTimeout(applyFilter, 200);
+            setTimeout(applyFilter, 100);
         });
 
         clearBtn.addEventListener("mousedown", function(e) {
@@ -159,6 +170,7 @@ var ocTabulatorUtil = {
         };
     },
 
+
     headerFilterString: function(cell, onRendered, success, cancel, editorParams) {
         const container = document.createElement("div");
         container.className = "custom-filter-header";
@@ -167,9 +179,9 @@ var ocTabulatorUtil = {
         const typeSelect = document.createElement("select");
         typeSelect.className = "filter-type-select";
         typeSelect.innerHTML = `
-                <option value="contains">Cont</option>
-                <option value="startsWith">Ini </option>
-                <option value="endsWith">Fin</option>
+                <option value="contains">*</option>
+                <option value="startsWith">a&rArr;</option>
+                <option value="endsWith">&larr;a</option>
                 <option value="eq">=</option>
                 <option value="ne">&ne;</option>
             `;
@@ -223,7 +235,7 @@ var ocTabulatorUtil = {
 
         // Apply filter on blur (when clicking outside)
         input.addEventListener("blur", function() {
-            setTimeout(applyFilter, 200); // Small delay to allow clear button click to process
+            setTimeout(applyFilter, 100);
         });
 
         onRendered(function() {
@@ -353,7 +365,7 @@ var ocTabulatorUtil = {
 
         input.addEventListener("change", applyFilter);
         input.addEventListener("blur", function() {
-            setTimeout(applyFilter, 200);
+            setTimeout(applyFilter, 100);
         });
 
         clearBtn.addEventListener("mousedown", function(e) {
@@ -502,7 +514,7 @@ var ocTabulatorUtil = {
                 });
             });
         }
-    }
+    },
 
     /* endregion */
 
