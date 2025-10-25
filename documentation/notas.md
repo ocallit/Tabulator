@@ -2,7 +2,39 @@
 
 
 
+var table = new Tabulator("#example-table", {
+height: "200px",
+data: tableData, // Your data array
+columns: [
+{title: "Name", field: "name"},
+{title: "Active", field: "activeStatus"}, // The column we will check
+{title: "Email", field: "email"}
+],
 
+    /**
+     * This is the function that solves your problem.
+     * It runs for every row that is rendered in the table.
+     */
+    rowFormatter: function(row) {
+        // 1. Get the data for the row
+        var data = row.getData();
+        
+        // 2. Check your condition
+        if (data.activeStatus === "Inactive") {
+            // 3. Get the row's HTML element
+            var element = row.getElement();
+            
+            // 4. Add your custom class
+            element.classList.add("inactive");
+        } else {
+            // 5. (Optional but recommended)
+            // Ensure the class is removed if the status is not 'Inactive'
+            // This handles cases where data is updated reactively
+            var element = row.getElement();
+            element.classList.remove("inactive");
+        }
+    }
+});
 
 
 
